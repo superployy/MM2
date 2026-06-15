@@ -1,0 +1,826 @@
+--[[
+    NEON V2 - HELLO KITTY EDITION (Mobile Optimized)
+    Features: Auto Farm, ESP (name, hitbox, tracers, murderer tools highlight),
+    Auto Knife Throw (tap button or hold on-screen), Hostage Mode, Sheriff Auto-Aim,
+    Auto Pickup Dropped Gun, Fling Sheriff/Murderer, Anti-Fling, Speed/Jump/FOV Sliders,
+    Player List Teleport, Noclip, Movable Action Buttons.
+    UI: Hello Kitty theme – pink, pastel, rounded corners, cat emojis.
+    No keyboard required – all controls are touchable.
+--]]
+
+-- Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local LP = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+local Mouse = LP:GetMouse()
+
+-- Settings
+local Settings = {
+    ESP = true,
+    Hitbox = true,
+    Tracers = true,
+    ShowMurdererTools = true,
+    AutoFarm = false,
+    AutoKnifeThrow = false,
+    HostageMode = false,
+    AutoShoot = false,
+    AutoPickupGun = false,
+    NoClip = false,
+    Speed = 16,
+    JumpPower = 50,
+    FOV = 70,
+    FlingSheriff = false,
+    FlingMurderer = false,
+    AntiFling = false,
+}
+
+-- Internal
+local espObjects = {}
+local noclipConn = nil
+local menuVisible = true
+local toggleButtonVisible = true   -- for the main ≡ button
+local screenGui = nil
+local mainFrame = nil
+local toggleButton = nil           -- the main menu button (≡)
+local hideToggleButton = nil       -- new button to hide/show the toggleButton
+local knifeButton = nil
+local shootButton = nil
+local getGunButton = nil
+local playerListFrame = nil
+local autoFarmConnection = nil
+local hostageConnection = nil
+local antiFlingConn = nil
+
+-- Helper functions (same as before, unchanged)
+local function getRoleColor(role)
+    if role == "Murderer" then return Color3.fromRGB(255, 100, 100) -- soft red
+    elseif role == "Sheriff" then return Color3.fromRGB(100, 150, 255) -- soft blue
+    else return Color3.fromRGB(100, 255, 100) end -- soft green
+end
+
+local function getRole(player)
+    if player == LP then return "You" end
+    local char = player.Character
+    if char then
+        for _, tool in pairs(char:GetChildren()) do
+            if tool:IsA("Tool") then
+                local name = tool.Name:lower()
+                if name:find("knife") or name:find("murderer") then return "Murderer"
+                elseif name:find("gun") or name:find("sheriff") then return "Sheriff" end
+            end
+        end
+    end
+    for _, tool in pairs(player.Backpack:GetChildren()) do
+        if tool:IsA("Tool") then
+            local name = tool.Name:lower()
+            if name:find("knife") or name:find("murderer") then return "Murderer"
+            elseif name:find("gun") or name:find("sheriff") then return "Sheriff" end
+        end
+    end
+    return "Innocent"
+end
+
+local function hasKnife(player)
+    local char = player.Character
+    if not char then return false end
+    for _, tool in pairs(char:GetChildren()) do
+        if tool:IsA("Tool") and (tool.Name:lower():find("knife") or tool.Name:lower():find("murderer")) then
+            return true
+        end
+    end
+    return false
+end
+
+local function hasGun(player)
+    local char = player.Character
+    if not char then return false end
+    for _, tool in pairs(char:GetChildren()) do
+        if tool:IsA("Tool") and (tool.Name:lower():find("gun") or tool.Name:lower():find("sheriff")) then
+            return true
+        end
+    end
+    return false
+end
+
+-- Auto Farm
+local function autoFarm()
+    if not Settings.AutoFarm then
+        if autoFarmConnection then autoFarmConnection:Disconnect() end
+        return
+    end
+    if autoFarmConnection then autoFarmConnection:Disconnect() end
+    autoFarmConnection = RunService.RenderStepped:Connect(function()
+        local char = LP.Character
+        if not char then return end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+        local nearestItem = nil
+        local nearestDist = 10
+        for _, obj in pairs(workspace:GetDescendants()) do
+            if obj:IsA("BasePart") and (obj.Name:lower():find("coin") or obj.Name:lower():find("money") or obj.Name:lower():find("drop") or obj:FindFirstChild("TouchInterest")) then
+                local dist = (hrp.Position - obj.Position).Magnitude
+                if dist < nearestDist and dist < 8 then
+                    nearestDist = dist
+                    nearestItem = obj
+                end
+            end
+        end
+        if nearestItem then
+            local humanoid = char:FindFirstChild("Humanoid")
+            if humanoid then
+                humanoid:MoveTo(nearestItem.Position)
+            end
+        end
+    end)
+end
+
+-- ESP (same logic, just UI colors are Hello Kitty style)
+local function updateESP()
+    if not Settings.ESP then
+        for _, v in pairs(espObjects) do
+            if v.label then v.label:Destroy() end
+            if v.box then v.box:Destroy() end
+            if v.tracer then v.tracer:Destroy() end
+            if v.toolIcon then v.toolIcon:Destroy() end
+        end
+        espObjects = {}
+        return
+    end
+    
+    local centerScreen = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+    
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr ~= LP and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+            local hrp = plr.Character.HumanoidRootPart
+            local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+            local role = getRole(plr)
+            local col = getRoleColor(role)
+            local dist = (LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") and 
+                         (hrp.Position - LP.Character.HumanoidRootPart.Position).Magnitude or 0)
+            local text = string.format("%s [%s] %.0fm", plr.Name, role, dist)
+            
+            if not espObjects[plr] then
+                local label = Instance.new("TextLabel")
+                label.BackgroundTransparency = 1
+                label.TextStrokeTransparency = 0.3
+                label.TextColor3 = col
+                label.Font = Enum.Font.GothamBold
+                label.TextSize = 14
+                label.Parent = screenGui
+                local box = nil
+                if Settings.Hitbox then
+                    box = Instance.new("Frame")
+                    box.BackgroundTransparency = 0.6
+                    box.BorderSizePixel = 2
+                    box.BorderColor3 = col
+                    box.BackgroundColor3 = col
+                    box.Size = UDim2.new(0, 60, 0, 80)
+                    box.Parent = screenGui
+                end
+                local tracer = nil
+                if Settings.Tracers then
+                    tracer = Instance.new("Frame")
+                    tracer.BackgroundColor3 = col
+                    tracer.BorderSizePixel = 0
+                    tracer.BackgroundTransparency = 0.4
+                    tracer.Parent = screenGui
+                end
+                local toolIcon = nil
+                if Settings.ShowMurdererTools then
+                    toolIcon = Instance.new("TextLabel")
+                    toolIcon.BackgroundTransparency = 1
+                    toolIcon.Text = ""
+                    toolIcon.Font = Enum.Font.GothamBold
+                    toolIcon.TextSize = 24
+                    toolIcon.Parent = screenGui
+                end
+                espObjects[plr] = {label = label, box = box, tracer = tracer, toolIcon = toolIcon}
+            end
+            
+            local data = espObjects[plr]
+            data.label.TextColor3 = col
+            if data.box then data.box.BorderColor3 = col end
+            if data.tracer then data.tracer.BackgroundColor3 = col end
+            if data.toolIcon then
+                if hasKnife(plr) then data.toolIcon.Text = "🔪"
+                elseif hasGun(plr) then data.toolIcon.Text = "🔫"
+                else data.toolIcon.Text = "" end
+                data.toolIcon.TextColor3 = col
+            end
+            
+            if onScreen then
+                data.label.Text = text
+                data.label.Position = UDim2.new(0, pos.X - 100, 0, pos.Y - 30)
+                data.label.Size = UDim2.new(0, 200, 0, 22)
+                data.label.Visible = true
+                
+                if Settings.Hitbox and data.box then
+                    local sizeOnScreen = 100 / (pos.Z or 1)
+                    data.box.Size = UDim2.new(0, sizeOnScreen, 0, sizeOnScreen * 1.5)
+                    data.box.Position = UDim2.new(0, pos.X - sizeOnScreen/2, 0, pos.Y - sizeOnScreen*0.75)
+                    data.box.Visible = true
+                elseif data.box then data.box.Visible = false end
+                
+                if Settings.Tracers and data.tracer then
+                    local startPos = centerScreen
+                    local endPos = Vector2.new(pos.X, pos.Y)
+                    local length = (endPos - startPos).Magnitude
+                    local angle = math.atan2(endPos.Y - startPos.Y, endPos.X - startPos.X)
+                    data.tracer.Position = UDim2.new(0, startPos.X, 0, startPos.Y)
+                    data.tracer.Size = UDim2.new(0, length, 0, 3)
+                    data.tracer.Rotation = math.deg(angle)
+                    data.tracer.Visible = true
+                elseif data.tracer then data.tracer.Visible = false end
+                
+                if Settings.ShowMurdererTools and data.toolIcon and data.toolIcon.Text ~= "" then
+                    data.toolIcon.Position = UDim2.new(0, pos.X - 20, 0, pos.Y - 60)
+                    data.toolIcon.Size = UDim2.new(0, 40, 0, 40)
+                    data.toolIcon.Visible = true
+                elseif data.toolIcon then data.toolIcon.Visible = false end
+            else
+                data.label.Visible = false
+                if data.box then data.box.Visible = false end
+                if data.tracer then data.tracer.Visible = false end
+                if data.toolIcon then data.toolIcon.Visible = false end
+            end
+        elseif espObjects[plr] then
+            local data = espObjects[plr]
+            data.label.Visible = false
+            if data.box then data.box.Visible = false end
+            if data.tracer then data.tracer.Visible = false end
+            if data.toolIcon then data.toolIcon.Visible = false end
+        end
+    end
+    
+    for plr, data in pairs(espObjects) do
+        if not plr or not plr.Parent then
+            data.label:Destroy()
+            if data.box then data.box:Destroy() end
+            if data.tracer then data.tracer:Destroy() end
+            if data.toolIcon then data.toolIcon:Destroy() end
+            espObjects[plr] = nil
+        end
+    end
+end
+
+-- Knife throw (mobile: tap button or long press? We'll keep the button)
+local function throwKnifeAt(targetPos)
+    local char = LP.Character
+    if not char then return end
+    local tool = char:FindFirstChildOfClass("Tool")
+    if tool then tool:Activate() end
+end
+
+local function autoKnifeThrowLoop()
+    if not Settings.AutoKnifeThrow then return end
+    local char = LP.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr ~= LP and getRole(plr) ~= "Murderer" then
+            local targetPart = plr.Character and (plr.Character:FindFirstChild("Head") or plr.Character:FindFirstChild("HumanoidRootPart"))
+            if targetPart then
+                throwKnifeAt(targetPart.Position)
+                task.wait(0.2)
+            end
+        end
+    end
+end
+
+-- Hostage mode
+local function setHostageMode()
+    if hostageConnection then hostageConnection:Disconnect() end
+    if not Settings.HostageMode then return end
+    hostageConnection = RunService.Stepped:Connect(function()
+        for _, plr in pairs(Players:GetPlayers()) do
+            if plr ~= LP and plr.Character then
+                local humanoid = plr.Character:FindFirstChild("Humanoid")
+                if humanoid then
+                    humanoid.WalkSpeed = 0
+                    humanoid.JumpPower = 0
+                end
+            end
+        end
+    end)
+end
+
+-- Sheriff shoot
+local function shootAt(targetPos)
+    local char = LP.Character
+    if not char then return end
+    local tool = char:FindFirstChildOfClass("Tool")
+    if tool then tool:Activate() end
+end
+
+local function autoShootLoop()
+    if not Settings.AutoShoot then return end
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr ~= LP and plr.Character and getRole(plr) == "Murderer" then
+            local targetPart = plr.Character:FindFirstChild("Head") or plr.Character:FindFirstChild("HumanoidRootPart")
+            if targetPart then
+                shootAt(targetPart.Position)
+                task.wait(0.2)
+            end
+        end
+    end
+end
+
+-- Auto pickup gun
+local function getDroppedGun()
+    local char = LP.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    for _, obj in pairs(workspace:GetDescendants()) do
+        if obj:IsA("Tool") and (obj.Name:lower():find("gun") or obj.Name:lower():find("sheriff")) then
+            if (hrp.Position - obj.Parent.Position).Magnitude < 5 then
+                obj.Parent = char
+                break
+            end
+        end
+    end
+end
+
+local function autoPickupLoop()
+    if Settings.AutoPickupGun then
+        getDroppedGun()
+        task.wait(0.5)
+    end
+end
+
+-- Fling
+local function flingPlayer(targetPlayer)
+    if not targetPlayer or not targetPlayer.Character then return end
+    local targetHRP = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if targetHRP then
+        targetHRP.Velocity = Vector3.new(math.random(-100,100), math.random(50,150), math.random(-100,100))
+    end
+end
+
+local function flingLoop()
+    if Settings.FlingSheriff then
+        for _, plr in pairs(Players:GetPlayers()) do
+            if plr ~= LP and getRole(plr) == "Sheriff" then flingPlayer(plr) end
+        end
+    end
+    if Settings.FlingMurderer then
+        for _, plr in pairs(Players:GetPlayers()) do
+            if plr ~= LP and getRole(plr) == "Murderer" then flingPlayer(plr) end
+        end
+    end
+end
+
+-- Anti fling
+local function antiFling()
+    if not Settings.AntiFling then
+        if antiFlingConn then antiFlingConn:Disconnect() end
+        return
+    end
+    if antiFlingConn then antiFlingConn:Disconnect() end
+    antiFlingConn = RunService.Stepped:Connect(function()
+        local char = LP.Character
+        if char then
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if hrp and hrp.Velocity.Magnitude > 100 then
+                hrp.Velocity = Vector3.new(0,0,0)
+            end
+        end
+    end)
+end
+
+-- Movement & FOV
+local function applyMovement()
+    local char = LP.Character
+    if char then
+        local humanoid = char:FindFirstChild("Humanoid")
+        if humanoid then
+            humanoid.WalkSpeed = Settings.Speed
+            humanoid.JumpPower = Settings.JumpPower
+        end
+    end
+end
+
+local function setFOV()
+    Camera.FieldOfView = Settings.FOV
+end
+
+-- Noclip
+local function toggleNoclip()
+    if Settings.NoClip then
+        if noclipConn then noclipConn:Disconnect() end
+        noclipConn = RunService.Stepped:Connect(function()
+            local char = LP.Character
+            if char then
+                for _, part in pairs(char:GetDescendants()) do
+                    if part:IsA("BasePart") then part.CanCollide = false end
+                end
+            end
+        end)
+    else
+        if noclipConn then noclipConn:Disconnect() end
+        local char = LP.Character
+        if char then
+            for _, part in pairs(char:GetDescendants()) do
+                if part:IsA("BasePart") then part.CanCollide = true end
+            end
+        end
+    end
+end
+
+-- Player list & teleport
+local function updatePlayerList()
+    if not playerListFrame then return end
+    for _, child in pairs(playerListFrame:GetChildren()) do
+        if child:IsA("TextButton") then child:Destroy() end
+    end
+    local y = 10
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr ~= LP then
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.new(0, 200, 0, 40)
+            btn.Position = UDim2.new(0, 10, 0, y)
+            btn.Text = plr.Name .. " (" .. getRole(plr) .. ")"
+            btn.BackgroundColor3 = Color3.fromRGB(255, 180, 200) -- pastel pink
+            btn.TextColor3 = Color3.fromRGB(80, 40, 60)
+            btn.Font = Enum.Font.GothamBold
+            btn.TextSize = 14
+            btn.Parent = playerListFrame
+            local btnCorner = Instance.new("UICorner")
+            btnCorner.CornerRadius = UDim.new(0, 12)
+            btnCorner.Parent = btn
+            btn.MouseButton1Click:Connect(function()
+                if LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                    LP.Character.HumanoidRootPart.CFrame = plr.Character.HumanoidRootPart.CFrame * CFrame.new(0, 2, 0)
+                end
+            end)
+            y = y + 45
+        end
+    end
+    playerListFrame.CanvasSize = UDim2.new(0,0,0, y+10)
+end
+
+-- Make buttons draggable (for mobile)
+local function makeMovableButton(btn)
+    local dragging = false
+    local dragStart = nil
+    local btnStartPos = nil
+    btn.MouseButton1Down:Connect(function()
+        dragging = true
+        dragStart = Vector2.new(Mouse.X, Mouse.Y)
+        btnStartPos = btn.Position
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local delta = Vector2.new(Mouse.X, Mouse.Y) - dragStart
+            btn.Position = UDim2.new(0, btnStartPos.X.Offset + delta.X, 0, btnStartPos.Y.Offset + delta.Y)
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+end
+
+-- Create action buttons (Hello Kitty style)
+local function createKnifeThrowButton()
+    knifeButton = Instance.new("TextButton")
+    knifeButton.Size = UDim2.new(0, 140, 0, 50)
+    knifeButton.Position = UDim2.new(0.5, -70, 0.8, 0)
+    knifeButton.Text = "🔪 THROW ALL"
+    knifeButton.BackgroundColor3 = Color3.fromRGB(255, 120, 120)
+    knifeButton.TextColor3 = Color3.fromRGB(255,255,255)
+    knifeButton.Font = Enum.Font.GothamBold
+    knifeButton.TextSize = 16
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 20)
+    corner.Parent = knifeButton
+    knifeButton.Parent = screenGui
+    makeMovableButton(knifeButton)
+    knifeButton.MouseButton1Click:Connect(autoKnifeThrowLoop)
+end
+
+local function createShootButton()
+    shootButton = Instance.new("TextButton")
+    shootButton.Size = UDim2.new(0, 140, 0, 50)
+    shootButton.Position = UDim2.new(0.5, -70, 0.86, 0)
+    shootButton.Text = "🔫 SHOOT MURDERER"
+    shootButton.BackgroundColor3 = Color3.fromRGB(100, 180, 255)
+    shootButton.TextColor3 = Color3.fromRGB(255,255,255)
+    shootButton.Font = Enum.Font.GothamBold
+    shootButton.TextSize = 14
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 20)
+    corner.Parent = shootButton
+    shootButton.Parent = screenGui
+    makeMovableButton(shootButton)
+    shootButton.MouseButton1Click:Connect(function()
+        for _, plr in pairs(Players:GetPlayers()) do
+            if plr ~= LP and getRole(plr) == "Murderer" and plr.Character then
+                local target = plr.Character:FindFirstChild("Head") or plr.Character:FindFirstChild("HumanoidRootPart")
+                if target then shootAt(target.Position) end
+                break
+            end
+        end
+    end)
+end
+
+local function createGetGunButton()
+    getGunButton = Instance.new("TextButton")
+    getGunButton.Size = UDim2.new(0, 140, 0, 50)
+    getGunButton.Position = UDim2.new(0.5, -70, 0.92, 0)
+    getGunButton.Text = "🔫 GET DROPPED GUN"
+    getGunButton.BackgroundColor3 = Color3.fromRGB(200, 160, 100)
+    getGunButton.TextColor3 = Color3.fromRGB(255,255,255)
+    getGunButton.Font = Enum.Font.GothamBold
+    getGunButton.TextSize = 14
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 20)
+    corner.Parent = getGunButton
+    getGunButton.Parent = screenGui
+    makeMovableButton(getGunButton)
+    getGunButton.MouseButton1Click:Connect(getDroppedGun)
+end
+
+-- ========== HELLO KITTY GUI ==========
+screenGui = Instance.new("ScreenGui")
+screenGui.Name = "HelloKitty_NEON"
+screenGui.Parent = LP.PlayerGui or game:GetService("CoreGui")
+screenGui.ResetOnSpawn = false
+
+-- Main menu frame (draggable)
+mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 420, 0, 580)
+mainFrame.Position = UDim2.new(0, 10, 0, 10)
+mainFrame.BackgroundColor3 = Color3.fromRGB(255, 220, 230) -- pastel pink
+mainFrame.BackgroundTransparency = 0.1
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.Parent = screenGui
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(0, 20)
+mainCorner.Parent = mainFrame
+
+-- Title bar with Hello Kitty
+local titleBar = Instance.new("Frame")
+titleBar.Size = UDim2.new(1,0,0,45)
+titleBar.BackgroundColor3 = Color3.fromRGB(255, 180, 200)
+titleBar.Parent = mainFrame
+local titleCorner = Instance.new("UICorner")
+titleCorner.CornerRadius = UDim.new(0, 20)
+titleCorner.Parent = titleBar
+
+local titleText = Instance.new("TextLabel")
+titleText.Size = UDim2.new(1,-50,1,0)
+titleText.Position = UDim2.new(0,15,0,0)
+titleText.BackgroundTransparency = 1
+titleText.Text = "🐱 NEON V2 • Hello Kitty Edition 🎀"
+titleText.TextColor3 = Color3.fromRGB(255, 80, 120)
+titleText.Font = Enum.Font.GothamBold
+titleText.TextSize = 18
+titleText.TextXAlignment = Enum.TextXAlignment.Left
+titleText.Parent = titleBar
+
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 35, 0, 35)
+closeBtn.Position = UDim2.new(1, -45, 0, 5)
+closeBtn.BackgroundColor3 = Color3.fromRGB(255, 120, 150)
+closeBtn.Text = "✕"
+closeBtn.TextColor3 = Color3.fromRGB(255,255,255)
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 20
+closeBtn.Parent = titleBar
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(0, 10)
+closeCorner.Parent = closeBtn
+closeBtn.MouseButton1Click:Connect(function() screenGui:Destroy() end)
+
+-- Scrollable content
+local scrollFrame = Instance.new("ScrollingFrame")
+scrollFrame.Size = UDim2.new(1,-20,1,-60)
+scrollFrame.Position = UDim2.new(0,10,0,55)
+scrollFrame.BackgroundTransparency = 1
+scrollFrame.CanvasSize = UDim2.new(0,0,0,850)
+scrollFrame.ScrollBarThickness = 4
+scrollFrame.Parent = mainFrame
+
+-- Helper: create toggle button (cute style)
+local function createToggle(parent, text, setting, yPos)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 380, 0, 45)
+    btn.Position = UDim2.new(0, 10, 0, yPos)
+    btn.BackgroundColor3 = Color3.fromRGB(255, 200, 210)
+    btn.Text = text .. ": " .. (Settings[setting] and "✔️ ON" or "❌ OFF")
+    btn.TextColor3 = Color3.fromRGB(100, 50, 70)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 14
+    btn.Parent = parent
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 15)
+    btnCorner.Parent = btn
+    btn.MouseButton1Click:Connect(function()
+        Settings[setting] = not Settings[setting]
+        btn.Text = text .. ": " .. (Settings[setting] and "✔️ ON" or "❌ OFF")
+        if setting == "NoClip" then toggleNoclip()
+        elseif setting == "AutoFarm" then autoFarm()
+        elseif setting == "HostageMode" then setHostageMode()
+        elseif setting == "AntiFling" then antiFling()
+        end
+    end)
+    return btn
+end
+
+-- Helper: create slider (pastel pink)
+local function createSlider(parent, text, setting, min, max, yPos)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 380, 0, 60)
+    frame.Position = UDim2.new(0, 10, 0, yPos)
+    frame.BackgroundColor3 = Color3.fromRGB(255, 210, 220)
+    frame.Parent = parent
+    local frameCorner = Instance.new("UICorner")
+    frameCorner.CornerRadius = UDim.new(0, 15)
+    frameCorner.Parent = frame
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1,0,0,25)
+    label.BackgroundTransparency = 1
+    label.Text = text .. ": " .. tostring(Settings[setting])
+    label.TextColor3 = Color3.fromRGB(100, 50, 70)
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 14
+    label.Parent = frame
+    
+    local sliderBg = Instance.new("Frame")
+    sliderBg.Size = UDim2.new(0.9,0,0,6)
+    sliderBg.Position = UDim2.new(0.05,0,0.7,0)
+    sliderBg.BackgroundColor3 = Color3.fromRGB(200, 150, 160)
+    sliderBg.Parent = frame
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.new(0, 16, 0, 16)
+    knob.Position = UDim2.new((Settings[setting]-min)/(max-min), -8, 0, -5)
+    knob.BackgroundColor3 = Color3.fromRGB(255, 100, 130)
+    knob.Parent = sliderBg
+    local knobCorner = Instance.new("UICorner")
+    knobCorner.CornerRadius = UDim.new(1,0)
+    knobCorner.Parent = knob
+    
+    local dragging = false
+    knob.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local relativeX = math.clamp((input.Position.X - sliderBg.AbsolutePosition.X) / sliderBg.AbsoluteSize.X, 0, 1)
+            local val = min + relativeX * (max - min)
+            Settings[setting] = math.floor(val)
+            label.Text = text .. ": " .. tostring(Settings[setting])
+            knob.Position = UDim2.new(relativeX, -8, 0, -5)
+            if setting == "Speed" or setting == "JumpPower" then applyMovement() end
+            if setting == "FOV" then setFOV() end
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+    return frame
+end
+
+-- Build the GUI toggles & sliders
+local y = 10
+createToggle(scrollFrame, "🐱 ESP (Name/Hitbox/Tracers)", "ESP", y); y = y + 50
+createToggle(scrollFrame, "📦 Hitbox ESP", "Hitbox", y); y = y + 50
+createToggle(scrollFrame, "📏 Tracers", "Tracers", y); y = y + 50
+createToggle(scrollFrame, "🔪 Show Murderer Tools", "ShowMurdererTools", y); y = y + 50
+createToggle(scrollFrame, "💰 Auto Farm", "AutoFarm", y); y = y + 50
+createToggle(scrollFrame, "🗡️ Auto Knife Throw (Tap button)", "AutoKnifeThrow", y); y = y + 50
+createToggle(scrollFrame, "🚫 Hostage Mode (Freeze All)", "HostageMode", y); y = y + 50
+createToggle(scrollFrame, "🎯 Sheriff Auto Shoot", "AutoShoot", y); y = y + 50
+createToggle(scrollFrame, "🔫 Auto Pickup Dropped Gun", "AutoPickupGun", y); y = y + 50
+createToggle(scrollFrame, "🌀 Fling Sheriff", "FlingSheriff", y); y = y + 50
+createToggle(scrollFrame, "🌀 Fling Murderer", "FlingMurderer", y); y = y + 50
+createToggle(scrollFrame, "🛡️ Anti Fling", "AntiFling", y); y = y + 50
+createToggle(scrollFrame, "👻 Noclip", "NoClip", y); y = y + 50
+createSlider(scrollFrame, "🏃 Walk Speed", "Speed", 16, 200, y); y = y + 70
+createSlider(scrollFrame, "🦘 Jump Power", "JumpPower", 50, 200, y); y = y + 70
+createSlider(scrollFrame, "🔭 FOV", "FOV", 70, 120, y); y = y + 70
+
+scrollFrame.CanvasSize = UDim2.new(0,0,0, y+20)
+
+-- Player list frame (Hello Kitty style)
+playerListFrame = Instance.new("ScrollingFrame")
+playerListFrame.Size = UDim2.new(0, 240, 0, 220)
+playerListFrame.Position = UDim2.new(1, -260, 0, 60)
+playerListFrame.BackgroundColor3 = Color3.fromRGB(255, 190, 200)
+playerListFrame.BackgroundTransparency = 0.2
+playerListFrame.BorderSizePixel = 2
+playerListFrame.BorderColor3 = Color3.fromRGB(255, 120, 150)
+playerListFrame.CanvasSize = UDim2.new(0,0,0,200)
+playerListFrame.ScrollBarThickness = 6
+playerListFrame.Parent = screenGui
+local listCorner = Instance.new("UICorner")
+listCorner.CornerRadius = UDim.new(0, 15)
+listCorner.Parent = playerListFrame
+
+local refreshBtn = Instance.new("TextButton")
+refreshBtn.Size = UDim2.new(0, 70, 0, 30)
+refreshBtn.Position = UDim2.new(1, -80, 0, 285)
+refreshBtn.Text = "🔄 Refresh"
+refreshBtn.BackgroundColor3 = Color3.fromRGB(255, 160, 180)
+refreshBtn.TextColor3 = Color3.fromRGB(100, 50, 70)
+refreshBtn.Font = Enum.Font.GothamBold
+refreshBtn.TextSize = 12
+refreshBtn.Parent = screenGui
+local refreshCorner = Instance.new("UICorner")
+refreshCorner.CornerRadius = UDim.new(0, 12)
+refreshCorner.Parent = refreshBtn
+refreshBtn.MouseButton1Click:Connect(updatePlayerList)
+updatePlayerList()
+
+-- Status label (Hello Kitty message)
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Size = UDim2.new(1, -20, 0, 30)
+statusLabel.Position = UDim2.new(0, 10, 1, -35)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Text = "🎀 Role: Unknown 🎀"
+statusLabel.TextColor3 = Color3.fromRGB(255, 100, 130)
+statusLabel.Font = Enum.Font.GothamBold
+statusLabel.TextSize = 14
+statusLabel.Parent = mainFrame
+
+-- ========== MAIN MENU TOGGLE BUTTON (≡) with Hello Kitty ==========
+toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0, 60, 0, 60)
+toggleButton.Position = UDim2.new(0, 15, 0, 70) -- below the main menu
+toggleButton.BackgroundColor3 = Color3.fromRGB(255, 140, 170)
+toggleButton.Text = "🐱"
+toggleButton.TextColor3 = Color3.fromRGB(255,255,255)
+toggleButton.Font = Enum.Font.GothamBold
+toggleButton.TextSize = 36
+toggleButton.BorderSizePixel = 0
+toggleButton.Parent = screenGui
+local toggleCorner = Instance.new("UICorner")
+toggleCorner.CornerRadius = UDim.new(1,0) -- circle
+toggleCorner.Parent = toggleButton
+
+toggleButton.MouseButton1Click:Connect(function()
+    menuVisible = not menuVisible
+    mainFrame.Visible = menuVisible
+end)
+
+-- ========== NEW: BUTTON TO HIDE THE TOGGLE BUTTON (for mobile) ==========
+hideToggleButton = Instance.new("TextButton")
+hideToggleButton.Size = UDim2.new(0, 50, 0, 50)
+hideToggleButton.Position = UDim2.new(0, 15, 0, 140) -- below the toggle button
+hideToggleButton.BackgroundColor3 = Color3.fromRGB(255, 200, 210)
+hideToggleButton.Text = "🙈"
+hideToggleButton.TextColor3 = Color3.fromRGB(100, 50, 70)
+hideToggleButton.Font = Enum.Font.GothamBold
+hideToggleButton.TextSize = 28
+hideToggleButton.Parent = screenGui
+local hideCorner = Instance.new("UICorner")
+hideCorner.CornerRadius = UDim.new(1,0)
+hideCorner.Parent = hideToggleButton
+
+hideToggleButton.MouseButton1Click:Connect(function()
+    toggleButtonVisible = not toggleButtonVisible
+    toggleButton.Visible = toggleButtonVisible
+    -- Visual feedback
+    hideToggleButton.Text = toggleButtonVisible and "🙈" or "🐵"
+    -- Optional chat message
+    LP:Chat("Toggle button " .. (toggleButtonVisible and "shown" : "hidden"))
+end)
+-- ===============================================================
+
+-- Create action buttons
+createKnifeThrowButton()
+createShootButton()
+createGetGunButton()
+
+-- Start loops
+RunService.RenderStepped:Connect(updateESP)
+toggleNoclip()
+autoFarm()
+antiFling()
+setHostageMode()
+
+task.spawn(function()
+    while screenGui and screenGui.Parent do
+        statusLabel.Text = "🎀 Your Role: " .. getRole(LP) .. " 🎀"
+        applyMovement()
+        if Settings.AutoShoot then autoShootLoop() end
+        if Settings.AutoPickupGun then autoPickupLoop() end
+        if Settings.FlingSheriff or Settings.FlingMurderer then flingLoop() end
+        setFOV()
+        task.wait(0.3)
+    end
+end)
+
+LP:Chat("🐱 HELLO KITTY EDITION LOADED! 🎀 | Tap 🙈 to hide/show the menu button | Drag all buttons")
