@@ -1,23 +1,18 @@
 --[[
     NEON V2 - HELLO KITTY EDITION (Mobile Optimized)
-    Features: Auto Farm, ESP (name, hitbox, tracers, murderer tools highlight),
-    Auto Knife Throw (tap button or hold on-screen), Hostage Mode, Sheriff Auto-Aim,
-    Auto Pickup Dropped Gun, Fling Sheriff/Murderer, Anti-Fling, Speed/Jump/FOV Sliders,
-    Player List Teleport, Noclip, Movable Action Buttons.
-    UI: Hello Kitty theme – pink, pastel, rounded corners, cat emojis.
-    No keyboard required – all controls are touchable.
+    FIXED: Permanent on-screen menu button (🐱) – tap to open/close main menu.
+    No chat commands, no hidden buttons. Always visible.
 --]]
 
 -- Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
 local LP = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local Mouse = LP:GetMouse()
 
--- Settings
+-- Settings (all features same as before)
 local Settings = {
     ESP = true,
     Hitbox = true,
@@ -41,11 +36,9 @@ local Settings = {
 local espObjects = {}
 local noclipConn = nil
 local menuVisible = true
-local toggleButtonVisible = true   -- for the main ≡ button
 local screenGui = nil
 local mainFrame = nil
-local toggleButton = nil           -- the main menu button (≡)
-local hideToggleButton = nil       -- new button to hide/show the toggleButton
+local menuButton = nil   -- the permanent toggle button
 local knifeButton = nil
 local shootButton = nil
 local getGunButton = nil
@@ -54,11 +47,11 @@ local autoFarmConnection = nil
 local hostageConnection = nil
 local antiFlingConn = nil
 
--- Helper functions (same as before, unchanged)
+-- Helper functions (unchanged)
 local function getRoleColor(role)
-    if role == "Murderer" then return Color3.fromRGB(255, 100, 100) -- soft red
-    elseif role == "Sheriff" then return Color3.fromRGB(100, 150, 255) -- soft blue
-    else return Color3.fromRGB(100, 255, 100) end -- soft green
+    if role == "Murderer" then return Color3.fromRGB(255, 100, 100)
+    elseif role == "Sheriff" then return Color3.fromRGB(100, 150, 255)
+    else return Color3.fromRGB(100, 255, 100) end
 end
 
 local function getRole(player)
@@ -137,7 +130,7 @@ local function autoFarm()
     end)
 end
 
--- ESP (same logic, just UI colors are Hello Kitty style)
+-- ESP (name, hitbox, tracer, tool icons)
 local function updateESP()
     if not Settings.ESP then
         for _, v in pairs(espObjects) do
@@ -266,7 +259,7 @@ local function updateESP()
     end
 end
 
--- Knife throw (mobile: tap button or long press? We'll keep the button)
+-- Knife throw
 local function throwKnifeAt(targetPos)
     local char = LP.Character
     if not char then return end
@@ -441,10 +434,10 @@ local function updatePlayerList()
     for _, plr in pairs(Players:GetPlayers()) do
         if plr ~= LP then
             local btn = Instance.new("TextButton")
-            btn.Size = UDim2.new(0, 200, 0, 40)
+            btn.Size = UDim2.new(0, 200, 0, 45)
             btn.Position = UDim2.new(0, 10, 0, y)
             btn.Text = plr.Name .. " (" .. getRole(plr) .. ")"
-            btn.BackgroundColor3 = Color3.fromRGB(255, 180, 200) -- pastel pink
+            btn.BackgroundColor3 = Color3.fromRGB(255, 180, 200)
             btn.TextColor3 = Color3.fromRGB(80, 40, 60)
             btn.Font = Enum.Font.GothamBold
             btn.TextSize = 14
@@ -457,7 +450,7 @@ local function updatePlayerList()
                     LP.Character.HumanoidRootPart.CFrame = plr.Character.HumanoidRootPart.CFrame * CFrame.new(0, 2, 0)
                 end
             end)
-            y = y + 45
+            y = y + 50
         end
     end
     playerListFrame.CanvasSize = UDim2.new(0,0,0, y+10)
@@ -486,18 +479,18 @@ local function makeMovableButton(btn)
     end)
 end
 
--- Create action buttons (Hello Kitty style)
+-- Create action buttons
 local function createKnifeThrowButton()
     knifeButton = Instance.new("TextButton")
-    knifeButton.Size = UDim2.new(0, 140, 0, 50)
-    knifeButton.Position = UDim2.new(0.5, -70, 0.8, 0)
+    knifeButton.Size = UDim2.new(0, 150, 0, 55)
+    knifeButton.Position = UDim2.new(0.5, -75, 0.8, 0)
     knifeButton.Text = "🔪 THROW ALL"
     knifeButton.BackgroundColor3 = Color3.fromRGB(255, 120, 120)
     knifeButton.TextColor3 = Color3.fromRGB(255,255,255)
     knifeButton.Font = Enum.Font.GothamBold
     knifeButton.TextSize = 16
     local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 20)
+    corner.CornerRadius = UDim.new(0, 25)
     corner.Parent = knifeButton
     knifeButton.Parent = screenGui
     makeMovableButton(knifeButton)
@@ -506,15 +499,15 @@ end
 
 local function createShootButton()
     shootButton = Instance.new("TextButton")
-    shootButton.Size = UDim2.new(0, 140, 0, 50)
-    shootButton.Position = UDim2.new(0.5, -70, 0.86, 0)
+    shootButton.Size = UDim2.new(0, 150, 0, 55)
+    shootButton.Position = UDim2.new(0.5, -75, 0.86, 0)
     shootButton.Text = "🔫 SHOOT MURDERER"
     shootButton.BackgroundColor3 = Color3.fromRGB(100, 180, 255)
     shootButton.TextColor3 = Color3.fromRGB(255,255,255)
     shootButton.Font = Enum.Font.GothamBold
     shootButton.TextSize = 14
     local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 20)
+    corner.CornerRadius = UDim.new(0, 25)
     corner.Parent = shootButton
     shootButton.Parent = screenGui
     makeMovableButton(shootButton)
@@ -531,15 +524,15 @@ end
 
 local function createGetGunButton()
     getGunButton = Instance.new("TextButton")
-    getGunButton.Size = UDim2.new(0, 140, 0, 50)
-    getGunButton.Position = UDim2.new(0.5, -70, 0.92, 0)
+    getGunButton.Size = UDim2.new(0, 150, 0, 55)
+    getGunButton.Position = UDim2.new(0.5, -75, 0.92, 0)
     getGunButton.Text = "🔫 GET DROPPED GUN"
     getGunButton.BackgroundColor3 = Color3.fromRGB(200, 160, 100)
     getGunButton.TextColor3 = Color3.fromRGB(255,255,255)
     getGunButton.Font = Enum.Font.GothamBold
     getGunButton.TextSize = 14
     local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 20)
+    corner.CornerRadius = UDim.new(0, 25)
     corner.Parent = getGunButton
     getGunButton.Parent = screenGui
     makeMovableButton(getGunButton)
@@ -554,9 +547,9 @@ screenGui.ResetOnSpawn = false
 
 -- Main menu frame (draggable)
 mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 420, 0, 580)
+mainFrame.Size = UDim2.new(0, 430, 0, 600)
 mainFrame.Position = UDim2.new(0, 10, 0, 10)
-mainFrame.BackgroundColor3 = Color3.fromRGB(255, 220, 230) -- pastel pink
+mainFrame.BackgroundColor3 = Color3.fromRGB(255, 220, 230)
 mainFrame.BackgroundTransparency = 0.1
 mainFrame.Active = true
 mainFrame.Draggable = true
@@ -565,9 +558,9 @@ local mainCorner = Instance.new("UICorner")
 mainCorner.CornerRadius = UDim.new(0, 20)
 mainCorner.Parent = mainFrame
 
--- Title bar with Hello Kitty
+-- Title bar
 local titleBar = Instance.new("Frame")
-titleBar.Size = UDim2.new(1,0,0,45)
+titleBar.Size = UDim2.new(1,0,0,50)
 titleBar.BackgroundColor3 = Color3.fromRGB(255, 180, 200)
 titleBar.Parent = mainFrame
 local titleCorner = Instance.new("UICorner")
@@ -575,10 +568,10 @@ titleCorner.CornerRadius = UDim.new(0, 20)
 titleCorner.Parent = titleBar
 
 local titleText = Instance.new("TextLabel")
-titleText.Size = UDim2.new(1,-50,1,0)
+titleText.Size = UDim2.new(1,-60,1,0)
 titleText.Position = UDim2.new(0,15,0,0)
 titleText.BackgroundTransparency = 1
-titleText.Text = "🐱 NEON V2 • Hello Kitty Edition 🎀"
+titleText.Text = "🐱 NEON V2 • Hello Kitty 🎀"
 titleText.TextColor3 = Color3.fromRGB(255, 80, 120)
 titleText.Font = Enum.Font.GothamBold
 titleText.TextSize = 18
@@ -586,8 +579,8 @@ titleText.TextXAlignment = Enum.TextXAlignment.Left
 titleText.Parent = titleBar
 
 local closeBtn = Instance.new("TextButton")
-closeBtn.Size = UDim2.new(0, 35, 0, 35)
-closeBtn.Position = UDim2.new(1, -45, 0, 5)
+closeBtn.Size = UDim2.new(0, 40, 0, 40)
+closeBtn.Position = UDim2.new(1, -50, 0, 5)
 closeBtn.BackgroundColor3 = Color3.fromRGB(255, 120, 150)
 closeBtn.Text = "✕"
 closeBtn.TextColor3 = Color3.fromRGB(255,255,255)
@@ -595,23 +588,23 @@ closeBtn.Font = Enum.Font.GothamBold
 closeBtn.TextSize = 20
 closeBtn.Parent = titleBar
 local closeCorner = Instance.new("UICorner")
-closeCorner.CornerRadius = UDim.new(0, 10)
+closeCorner.CornerRadius = UDim.new(0, 12)
 closeCorner.Parent = closeBtn
 closeBtn.MouseButton1Click:Connect(function() screenGui:Destroy() end)
 
 -- Scrollable content
 local scrollFrame = Instance.new("ScrollingFrame")
-scrollFrame.Size = UDim2.new(1,-20,1,-60)
-scrollFrame.Position = UDim2.new(0,10,0,55)
+scrollFrame.Size = UDim2.new(1,-20,1,-65)
+scrollFrame.Position = UDim2.new(0,10,0,60)
 scrollFrame.BackgroundTransparency = 1
 scrollFrame.CanvasSize = UDim2.new(0,0,0,850)
 scrollFrame.ScrollBarThickness = 4
 scrollFrame.Parent = mainFrame
 
--- Helper: create toggle button (cute style)
+-- Helper: create toggle button
 local function createToggle(parent, text, setting, yPos)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 380, 0, 45)
+    btn.Size = UDim2.new(0, 390, 0, 50)
     btn.Position = UDim2.new(0, 10, 0, yPos)
     btn.BackgroundColor3 = Color3.fromRGB(255, 200, 210)
     btn.Text = text .. ": " .. (Settings[setting] and "✔️ ON" or "❌ OFF")
@@ -634,10 +627,10 @@ local function createToggle(parent, text, setting, yPos)
     return btn
 end
 
--- Helper: create slider (pastel pink)
+-- Helper: create slider
 local function createSlider(parent, text, setting, min, max, yPos)
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 380, 0, 60)
+    frame.Size = UDim2.new(0, 390, 0, 65)
     frame.Position = UDim2.new(0, 10, 0, yPos)
     frame.BackgroundColor3 = Color3.fromRGB(255, 210, 220)
     frame.Parent = parent
@@ -646,7 +639,7 @@ local function createSlider(parent, text, setting, min, max, yPos)
     frameCorner.Parent = frame
     
     local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1,0,0,25)
+    label.Size = UDim2.new(1,0,0,28)
     label.BackgroundTransparency = 1
     label.Text = text .. ": " .. tostring(Settings[setting])
     label.TextColor3 = Color3.fromRGB(100, 50, 70)
@@ -660,8 +653,8 @@ local function createSlider(parent, text, setting, min, max, yPos)
     sliderBg.BackgroundColor3 = Color3.fromRGB(200, 150, 160)
     sliderBg.Parent = frame
     local knob = Instance.new("Frame")
-    knob.Size = UDim2.new(0, 16, 0, 16)
-    knob.Position = UDim2.new((Settings[setting]-min)/(max-min), -8, 0, -5)
+    knob.Size = UDim2.new(0, 18, 0, 18)
+    knob.Position = UDim2.new((Settings[setting]-min)/(max-min), -9, 0, -6)
     knob.BackgroundColor3 = Color3.fromRGB(255, 100, 130)
     knob.Parent = sliderBg
     local knobCorner = Instance.new("UICorner")
@@ -680,7 +673,7 @@ local function createSlider(parent, text, setting, min, max, yPos)
             local val = min + relativeX * (max - min)
             Settings[setting] = math.floor(val)
             label.Text = text .. ": " .. tostring(Settings[setting])
-            knob.Position = UDim2.new(relativeX, -8, 0, -5)
+            knob.Position = UDim2.new(relativeX, -9, 0, -6)
             if setting == "Speed" or setting == "JumpPower" then applyMovement() end
             if setting == "FOV" then setFOV() end
         end
@@ -693,31 +686,31 @@ local function createSlider(parent, text, setting, min, max, yPos)
     return frame
 end
 
--- Build the GUI toggles & sliders
+-- Build GUI toggles & sliders
 local y = 10
-createToggle(scrollFrame, "🐱 ESP (Name/Hitbox/Tracers)", "ESP", y); y = y + 50
-createToggle(scrollFrame, "📦 Hitbox ESP", "Hitbox", y); y = y + 50
-createToggle(scrollFrame, "📏 Tracers", "Tracers", y); y = y + 50
-createToggle(scrollFrame, "🔪 Show Murderer Tools", "ShowMurdererTools", y); y = y + 50
-createToggle(scrollFrame, "💰 Auto Farm", "AutoFarm", y); y = y + 50
-createToggle(scrollFrame, "🗡️ Auto Knife Throw (Tap button)", "AutoKnifeThrow", y); y = y + 50
-createToggle(scrollFrame, "🚫 Hostage Mode (Freeze All)", "HostageMode", y); y = y + 50
-createToggle(scrollFrame, "🎯 Sheriff Auto Shoot", "AutoShoot", y); y = y + 50
-createToggle(scrollFrame, "🔫 Auto Pickup Dropped Gun", "AutoPickupGun", y); y = y + 50
-createToggle(scrollFrame, "🌀 Fling Sheriff", "FlingSheriff", y); y = y + 50
-createToggle(scrollFrame, "🌀 Fling Murderer", "FlingMurderer", y); y = y + 50
-createToggle(scrollFrame, "🛡️ Anti Fling", "AntiFling", y); y = y + 50
-createToggle(scrollFrame, "👻 Noclip", "NoClip", y); y = y + 50
-createSlider(scrollFrame, "🏃 Walk Speed", "Speed", 16, 200, y); y = y + 70
-createSlider(scrollFrame, "🦘 Jump Power", "JumpPower", 50, 200, y); y = y + 70
-createSlider(scrollFrame, "🔭 FOV", "FOV", 70, 120, y); y = y + 70
+createToggle(scrollFrame, "🐱 ESP (Name/Hitbox/Tracers)", "ESP", y); y = y + 55
+createToggle(scrollFrame, "📦 Hitbox ESP", "Hitbox", y); y = y + 55
+createToggle(scrollFrame, "📏 Tracers", "Tracers", y); y = y + 55
+createToggle(scrollFrame, "🔪 Show Murderer Tools", "ShowMurdererTools", y); y = y + 55
+createToggle(scrollFrame, "💰 Auto Farm", "AutoFarm", y); y = y + 55
+createToggle(scrollFrame, "🗡️ Auto Knife Throw (Tap button)", "AutoKnifeThrow", y); y = y + 55
+createToggle(scrollFrame, "🚫 Hostage Mode (Freeze All)", "HostageMode", y); y = y + 55
+createToggle(scrollFrame, "🎯 Sheriff Auto Shoot", "AutoShoot", y); y = y + 55
+createToggle(scrollFrame, "🔫 Auto Pickup Dropped Gun", "AutoPickupGun", y); y = y + 55
+createToggle(scrollFrame, "🌀 Fling Sheriff", "FlingSheriff", y); y = y + 55
+createToggle(scrollFrame, "🌀 Fling Murderer", "FlingMurderer", y); y = y + 55
+createToggle(scrollFrame, "🛡️ Anti Fling", "AntiFling", y); y = y + 55
+createToggle(scrollFrame, "👻 Noclip", "NoClip", y); y = y + 55
+createSlider(scrollFrame, "🏃 Walk Speed", "Speed", 16, 200, y); y = y + 75
+createSlider(scrollFrame, "🦘 Jump Power", "JumpPower", 50, 200, y); y = y + 75
+createSlider(scrollFrame, "🔭 FOV", "FOV", 70, 120, y); y = y + 75
 
 scrollFrame.CanvasSize = UDim2.new(0,0,0, y+20)
 
--- Player list frame (Hello Kitty style)
+-- Player list frame
 playerListFrame = Instance.new("ScrollingFrame")
-playerListFrame.Size = UDim2.new(0, 240, 0, 220)
-playerListFrame.Position = UDim2.new(1, -260, 0, 60)
+playerListFrame.Size = UDim2.new(0, 250, 0, 240)
+playerListFrame.Position = UDim2.new(1, -270, 0, 60)
 playerListFrame.BackgroundColor3 = Color3.fromRGB(255, 190, 200)
 playerListFrame.BackgroundTransparency = 0.2
 playerListFrame.BorderSizePixel = 2
@@ -730,13 +723,13 @@ listCorner.CornerRadius = UDim.new(0, 15)
 listCorner.Parent = playerListFrame
 
 local refreshBtn = Instance.new("TextButton")
-refreshBtn.Size = UDim2.new(0, 70, 0, 30)
-refreshBtn.Position = UDim2.new(1, -80, 0, 285)
+refreshBtn.Size = UDim2.new(0, 80, 0, 35)
+refreshBtn.Position = UDim2.new(1, -90, 0, 305)
 refreshBtn.Text = "🔄 Refresh"
 refreshBtn.BackgroundColor3 = Color3.fromRGB(255, 160, 180)
 refreshBtn.TextColor3 = Color3.fromRGB(100, 50, 70)
 refreshBtn.Font = Enum.Font.GothamBold
-refreshBtn.TextSize = 12
+refreshBtn.TextSize = 13
 refreshBtn.Parent = screenGui
 local refreshCorner = Instance.new("UICorner")
 refreshCorner.CornerRadius = UDim.new(0, 12)
@@ -744,10 +737,10 @@ refreshCorner.Parent = refreshBtn
 refreshBtn.MouseButton1Click:Connect(updatePlayerList)
 updatePlayerList()
 
--- Status label (Hello Kitty message)
+-- Status label
 local statusLabel = Instance.new("TextLabel")
-statusLabel.Size = UDim2.new(1, -20, 0, 30)
-statusLabel.Position = UDim2.new(0, 10, 1, -35)
+statusLabel.Size = UDim2.new(1, -20, 0, 35)
+statusLabel.Position = UDim2.new(0, 10, 1, -40)
 statusLabel.BackgroundTransparency = 1
 statusLabel.Text = "🎀 Role: Unknown 🎀"
 statusLabel.TextColor3 = Color3.fromRGB(255, 100, 130)
@@ -755,56 +748,40 @@ statusLabel.Font = Enum.Font.GothamBold
 statusLabel.TextSize = 14
 statusLabel.Parent = mainFrame
 
--- ========== MAIN MENU TOGGLE BUTTON (≡) with Hello Kitty ==========
-toggleButton = Instance.new("TextButton")
-toggleButton.Size = UDim2.new(0, 60, 0, 60)
-toggleButton.Position = UDim2.new(0, 15, 0, 70) -- below the main menu
-toggleButton.BackgroundColor3 = Color3.fromRGB(255, 140, 170)
-toggleButton.Text = "🐱"
-toggleButton.TextColor3 = Color3.fromRGB(255,255,255)
-toggleButton.Font = Enum.Font.GothamBold
-toggleButton.TextSize = 36
-toggleButton.BorderSizePixel = 0
-toggleButton.Parent = screenGui
-local toggleCorner = Instance.new("UICorner")
-toggleCorner.CornerRadius = UDim.new(1,0) -- circle
-toggleCorner.Parent = toggleButton
+-- ========== PERMANENT MENU BUTTON (BOTTOM LEFT, ALWAYS VISIBLE) ==========
+menuButton = Instance.new("TextButton")
+menuButton.Size = UDim2.new(0, 90, 0, 90)
+menuButton.Position = UDim2.new(0, 15, 1, -105)  -- bottom-left, above edge
+menuButton.BackgroundColor3 = Color3.fromRGB(255, 140, 170)
+menuButton.Text = "🐱"
+menuButton.TextColor3 = Color3.fromRGB(255,255,255)
+menuButton.Font = Enum.Font.GothamBold
+menuButton.TextSize = 56
+menuButton.BorderSizePixel = 3
+menuButton.BorderColor3 = Color3.fromRGB(255,255,255)
+menuButton.AutoButtonColor = true
+menuButton.Parent = screenGui
+local menuCorner = Instance.new("UICorner")
+menuCorner.CornerRadius = UDim.new(1,0)  -- perfect circle
+menuCorner.Parent = menuButton
 
-toggleButton.MouseButton1Click:Connect(function()
+-- Simple toggle: show/hide main menu
+menuButton.MouseButton1Click:Connect(function()
     menuVisible = not menuVisible
     mainFrame.Visible = menuVisible
+    -- Optional: change button icon briefly for feedback
+    local originalText = menuButton.Text
+    menuButton.Text = menuVisible and "🐱" : "🙈"
+    task.wait(0.15)
+    menuButton.Text = originalText
 end)
-
--- ========== NEW: BUTTON TO HIDE THE TOGGLE BUTTON (for mobile) ==========
-hideToggleButton = Instance.new("TextButton")
-hideToggleButton.Size = UDim2.new(0, 50, 0, 50)
-hideToggleButton.Position = UDim2.new(0, 15, 0, 140) -- below the toggle button
-hideToggleButton.BackgroundColor3 = Color3.fromRGB(255, 200, 210)
-hideToggleButton.Text = "🙈"
-hideToggleButton.TextColor3 = Color3.fromRGB(100, 50, 70)
-hideToggleButton.Font = Enum.Font.GothamBold
-hideToggleButton.TextSize = 28
-hideToggleButton.Parent = screenGui
-local hideCorner = Instance.new("UICorner")
-hideCorner.CornerRadius = UDim.new(1,0)
-hideCorner.Parent = hideToggleButton
-
-hideToggleButton.MouseButton1Click:Connect(function()
-    toggleButtonVisible = not toggleButtonVisible
-    toggleButton.Visible = toggleButtonVisible
-    -- Visual feedback
-    hideToggleButton.Text = toggleButtonVisible and "🙈" or "🐵"
-    -- Optional chat message
-    LP:Chat("Toggle button " .. (toggleButtonVisible and "shown" : "hidden"))
-end)
--- ===============================================================
 
 -- Create action buttons
 createKnifeThrowButton()
 createShootButton()
 createGetGunButton()
 
--- Start loops
+-- Start all core loops
 RunService.RenderStepped:Connect(updateESP)
 toggleNoclip()
 autoFarm()
@@ -823,4 +800,4 @@ task.spawn(function()
     end
 end)
 
-LP:Chat("🐱 HELLO KITTY EDITION LOADED! 🎀 | Tap 🙈 to hide/show the menu button | Drag all buttons")
+LP:Chat("🐱 HELLO KITTY EDITION READY! Tap the big cat button at bottom-left to open menu.")
